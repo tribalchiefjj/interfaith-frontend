@@ -21,6 +21,7 @@ interface Post {
   likes: number;
   dislikes: number;
   comments: Comment[];
+  pinned: boolean;
 }
 
 export default function AdminDashboard() {
@@ -28,6 +29,7 @@ export default function AdminDashboard() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [editingPostId, setEditingPostId] = useState<number | null>(null);
   const [editPostForm, setEditPostForm] = useState({
     religion: '',
@@ -43,37 +45,38 @@ export default function AdminDashboard() {
   const [token, setToken] = useState<string | null>(null);
   const router = useRouter();
 
-  // Check auth token
   useEffect(() => {
     const t = localStorage.getItem('adminToken');
     if (!t) return router.push('/admin/login');
     setToken(t);
   }, [router]);
 
-  // Fetch posts + comments
-  useEffect(() => {
-    if (!token) return;
-    setLoading(true);
-    fetch(`${API}/api/posts`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then(setPosts)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [token, API]);
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API}/api/posts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data: unknown = await res.json();
+      if (!Array.isArray(data)) throw new Error('Invalid post data');
 
-  const refreshPosts = () => {
-    if (!token) return;
-    fetch(`${API}/api/posts`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then(setPosts)
-      .catch((e) => setError(e.message));
+      const sortedPosts = [...data as Post[]].sort((a, b) =>
+        (b.pinned ? 1 : -1) - (a.pinned ? 1 : -1)
+      );
+      setPosts(sortedPosts);
+    } catch (err) {
+      if (err instanceof Error) setError(err.message);
+      else setError('Unknown error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Post handlers
+  useEffect(() => {
+    if (!token) return;
+    fetchPosts();
+  }, [token]);
+
   const handleDeletePost = async (id: number) => {
     if (!confirm('Delete this post?')) return;
     await fetch(`${API}/api/posts/${id}`, {
@@ -103,22 +106,16 @@ export default function AdminDashboard() {
       body: JSON.stringify(editPostForm),
     });
     setEditingPostId(null);
-    refreshPosts();
+    fetchPosts();
   };
 
-  // Comment handlers
   const handleDeleteComment = async (id: number) => {
     if (!confirm('Delete this comment?')) return;
     await fetch(`${API}/api/comments/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
-    setPosts((ps) =>
-      ps.map((p) => ({
-        ...p,
-        comments: p.comments.filter((c) => c.id !== id),
-      }))
-    );
+    fetchPosts();
   };
 
   const handleEditComment = (comment: Comment) => {
@@ -139,7 +136,32 @@ export default function AdminDashboard() {
       body: JSON.stringify(editCommentForm),
     });
     setEditingCommentId(null);
-    refreshPosts();
+    fetchPosts();
+  };
+
+  const handleTogglePin = async (postId: number, isPinned: boolean) => {
+    try {
+      const res = await fetch(`${API}/api/posts/${postId}/pin`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pinned: !isPinned }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to ${isPinned ? 'unpin' : 'pin'} post`);
+      }
+
+      setMessage(`Post ${isPinned ? 'unpinned' : 'pinned'} successfully`);
+      setTimeout(() => setMessage(''), 3000);
+      fetchPosts();
+    } catch (err) {
+      if (err instanceof Error) setError(err.message);
+      else setError('Unknown error occurred');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   if (!token) return <p>Checking authentication...</p>;
@@ -162,11 +184,14 @@ export default function AdminDashboard() {
 
         {loading && <p>Loading...</p>}
         {error && <p className="text-red-500">{error}</p>}
+        {message && <p className="text-green-500">{message}</p>}
 
         {posts.map((post) => (
           <div
             key={post.id}
-            className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-6"
+            className={`bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-6 ${
+              post.pinned ? 'border-l-4 border-yellow-500' : ''
+            }`}
           >
             {editingPostId === post.id ? (
               <div className="space-y-3">
@@ -222,47 +247,83 @@ export default function AdminDashboard() {
               <>
                 <div className="flex justify-between items-start mb-4">
                   <div>
+                    {post.pinned && (
+                      <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-800 mr-2">
+                        📌 Pinned
+                      </span>
+                    )}
                     <h2 className="text-xl font-semibold">
                       [{post.religion}] {post.sign}
                     </h2>
                     <p className="mt-2">{post.thought}</p>
                     <p className="text-sm text-gray-500 mt-1">
-                      {post.username} •{' '}
-                      {new Date(post.created_at).toLocaleString()}
+                      {post.username} • {new Date(post.created_at).toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDeletePost(post.id)}
+                      className="bg-red-600 text-white px-3 py-1 rounded"
+                    >
+                      Delete
+                    </button>
                     <button
                       onClick={() => handleEditPost(post)}
-                      className="text-blue-600 hover:underline"
+                      className="bg-blue-600 text-white px-3 py-1 rounded"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDeletePost(post.id)}
-                      className="text-red-600 hover:underline"
+                      onClick={() => handleTogglePin(post.id, post.pinned)}
+                      className={`${
+                        post.pinned ? 'bg-yellow-600' : 'bg-gray-600'
+                      } text-white px-3 py-1 rounded`}
                     >
-                      Delete
+                      {post.pinned ? 'Unpin' : 'Pin'}
                     </button>
                   </div>
                 </div>
 
                 {post.comments.length > 0 && (
-                  <div className="mt-4 border-t pt-4">
+                  <div className="space-y-4 mt-4">
                     {post.comments.map((comment) => (
                       <div
                         key={comment.id}
-                        className="relative p-3 mb-2 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                        className="bg-gray-700 text-white p-3 rounded-md shadow-sm"
                       >
-                        {editingCommentId === comment.id ? (
-                          <div className="space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm">{comment.username}</p>
+                            <p>{comment.text}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="bg-red-500 text-white px-2 py-1 rounded"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              onClick={() => handleEditComment(comment)}
+                              className="bg-blue-500 text-white px-2 py-1 rounded"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                        {editingCommentId === comment.id && (
+                          <div className="mt-2 space-y-2">
                             <textarea
                               className="w-full p-2 border rounded"
                               rows={2}
                               value={editCommentForm.text}
                               onChange={(e) =>
-                                setEditCommentForm((f) => ({ ...f, text: e.target.value }))
+                                setEditCommentForm((f) => ({
+                                  ...f,
+                                  text: e.target.value,
+                                }))
                               }
+                              placeholder="Edit comment"
                             />
                             <input
                               className="w-full p-2 border rounded"
@@ -273,7 +334,7 @@ export default function AdminDashboard() {
                                   username: e.target.value,
                                 }))
                               }
-                              placeholder="Username"
+                              placeholder="Edit username"
                             />
                             <div className="flex gap-2">
                               <button
@@ -290,28 +351,6 @@ export default function AdminDashboard() {
                               </button>
                             </div>
                           </div>
-                        ) : (
-                          <>
-                            <p className="text-sm">{comment.text}</p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {comment.username} •{' '}
-                              {new Date(comment.created_at).toLocaleString()}
-                            </p>
-                            <div className="absolute top-2 right-2 flex gap-2">
-                              <button
-                                onClick={() => handleEditComment(comment)}
-                                className="text-blue-600 hover:underline text-sm"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteComment(comment.id)}
-                                className="text-red-600 hover:underline text-sm"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </>
                         )}
                       </div>
                     ))}

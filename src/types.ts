@@ -6,6 +6,7 @@ export interface Comment {
   }
   
   export interface Post {
+    pinned?: boolean;
     avatar: string | Blob | undefined;
     reflections?: number
     likes: number;
@@ -17,4 +18,5 @@ export interface Comment {
     username: string; // 🆕
     comments: Comment[]; // 👈 Required comments array
     dislikes: number; // 👈 new
+   
   }

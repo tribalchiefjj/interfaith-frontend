@@ -6,6 +6,7 @@ interface Comment {
   text: string;
   created_at: string;
   username: string;
+  is_admin?: boolean;
   replies?: Comment[];
 }
 
