@@ -18,9 +18,12 @@ import { formatDistanceToNowStrict } from 'date-fns';
 
 interface PostCardProps {
   post: Post;
+  maxThoughtLength?: number; // Optional prop to control the maximum displayed thought length
 }
 
-export default function PostCard({ post }: PostCardProps) {
+const DEFAULT_MAX_THOUGHT_LENGTH = 200; // You can adjust this value
+
+export default function PostCard({ post, maxThoughtLength = DEFAULT_MAX_THOUGHT_LENGTH }: PostCardProps) {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
   const [showComments, setShowComments] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -30,6 +33,7 @@ export default function PostCard({ post }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isReflected, setIsReflected] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleCommentAdded = () => {
     setRefreshKey((prev) => prev + 1);
@@ -67,6 +71,12 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const isAnonymous = !post.username;
+  const isThoughtTooLong = post.thought.length > maxThoughtLength;
+  const displayedThought = expanded ? post.thought : post.thought.slice(0, maxThoughtLength);
+
+  const toggleExpand = () => {
+    setExpanded(!expanded);
+  };
 
   const generateAvatarColor = (username: string) => {
     const colors = ['bg-blue-400', 'bg-green-400', 'bg-red-400', 'bg-purple-400', 'bg-yellow-400'];
@@ -78,12 +88,11 @@ export default function PostCard({ post }: PostCardProps) {
     <div className="rounded-xl bg-white/70 dark:bg-white/10 backdrop-blur shadow mb-6 transition border border-transparent border-t-4 border-t-purple-700/80 animate-glow relative">
       {/* Pinned Post Indicator */}
       {post.pinned && (
-  <div className="absolute top-2 right-2 flex items-center gap-1 bg-yellow-100 dark:bg-yellow-900 px-2 py-1 rounded-full">
-    <FaThumbtack className="w-4 h-4 text-yellow-600 dark:text-yellow-300 rotate-45" />
-    <span className="text-xs text-yellow-700 dark:text-yellow-200 font-medium">Admin Pinned</span>
-  </div>
-)}
-
+        <div className="absolute top-2 right-2 flex items-center gap-1 bg-yellow-100 dark:bg-yellow-900 px-2 py-1 rounded-full">
+          <FaThumbtack className="w-4 h-4 text-yellow-600 dark:text-yellow-300 rotate-45" />
+          <span className="text-xs text-yellow-700 dark:text-yellow-200 font-medium">Admin Pinned</span>
+        </div>
+      )}
 
       <div className={`${post.pinned ? 'border-l-4 border-yellow-500' : ''}`}>
         <div className="flex items-center p-3">
@@ -117,7 +126,19 @@ export default function PostCard({ post }: PostCardProps) {
         <div className="px-3 pb-3">
           <div className="text-blue-700 dark:text-blue-300 text-xs font-semibold">[{post.religion}]</div>
           <div className="italic text-lg text-gray-800 dark:text-gray-100 mt-1">“{post.sign}”</div>
-          <p className="mt-2 text-gray-700 dark:text-gray-200 text-sm">{post.thought}</p>
+          <p className="mt-2 text-gray-700 dark:text-gray-200 text-sm">
+            {displayedThought}
+            {isThoughtTooLong && !expanded && (
+              <button onClick={toggleExpand} className="text-blue-500 dark:text-blue-400 ml-1 hover:underline">
+                Read more
+              </button>
+            )}
+            {isThoughtTooLong && expanded && (
+              <button onClick={toggleExpand} className="text-blue-500 dark:text-blue-400 ml-1 hover:underline">
+                Read less
+              </button>
+            )}
+          </p>
 
           <div className="mt-3 flex items-center justify-between">
             <div className="flex items-center gap-x-4">
