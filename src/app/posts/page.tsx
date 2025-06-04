@@ -57,6 +57,11 @@ const religionIcons: { [key: string]: React.ReactNode } = {
 const DatabaseErrorMessage = () => {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-6">
+      {/* Error fetching post message */}
+      <p className="text-red-500 dark:text-red-400 font-semibold text-lg mb-4 text-center">
+        Error fetching posts!
+      </p>
+      
       <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-8 max-w-md w-full text-center shadow-lg border border-blue-200 dark:border-gray-600">
         
         {/* Icon with animation */}
